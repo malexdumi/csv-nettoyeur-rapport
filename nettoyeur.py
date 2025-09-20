@@ -1,10 +1,15 @@
 # nettoyeur.py
-# Lecture d'un CSV + détection des lignes dupliquées
-# v1.1 -- ajout de la détection de doublons
+# v1.2 -- correction bug doublons subtils
 #
-# Idée : convertir chaque ligne en tuple et utiliser un dictionnaire
-# pour compter combien de fois chaque ligne apparaît.
-# Si une ligne apparaît plus d'une fois -> doublon.
+# Problème découvert en testant avec test_doublons_subtils.csv :
+# "Balance analytique" et "Balance Analytique " (avec espace en fin)
+# n'étaient PAS détectés comme doublons parce que la comparaison
+# était sensible à la casse et aux espaces.
+#
+# Fix : normaliser chaque cellule avec .strip().lower() avant
+# de créer la clé de comparaison.
+# On garde la ligne originale pour l'affichage, mais on compare
+# la version normalisée. Deux variables : une pour comparer, une pour afficher.
 
 import csv
 import sys
@@ -26,27 +31,37 @@ def lire_csv(chemin_fichier):
     return entete, lignes
 
 
+def normaliser_ligne(ligne):
+    """
+    Normalise une ligne pour la comparaison :
+    - enlève les espaces en début/fin de chaque cellule (.strip())
+    - met tout en minuscules (.lower())
+    Retourne un tuple utilisable comme clé de dictionnaire.
+    """
+    return tuple(cellule.strip().lower() for cellule in ligne)
+
+
 def detecter_doublons(lignes):
     """
-    Retourne un dictionnaire des lignes qui apparaissent plus d'une fois.
-    La clé est un tuple de la ligne, la valeur est le nombre d'occurrences.
+    Détecte les doublons en comparant les lignes normalisées.
+    Retourne une liste de tuples : (ligne_originale, nb_occurrences).
     """
-    compteur = {}
+    compteur = {}       # clé normalisée -> nombre d'occurrences
+    premieres = {}      # clé normalisée -> première ligne originale vue
 
     for ligne in lignes:
-        # Convertir la liste en tuple pour pouvoir l'utiliser comme clé
-        cle = tuple(ligne)
+        cle = normaliser_ligne(ligne)
 
         if cle in compteur:
             compteur[cle] += 1
         else:
             compteur[cle] = 1
+            premieres[cle] = ligne
 
-    # Garder seulement les lignes qui apparaissent plus d'une fois
-    doublons = {}
+    doublons = []
     for cle, count in compteur.items():
         if count > 1:
-            doublons[cle] = count
+            doublons.append((premieres[cle], count))
 
     return doublons
 
@@ -58,11 +73,8 @@ def afficher_resultats(entete, doublons):
         return
 
     print(f"{len(doublons)} doublon(s) détecté(s) :\n")
-    print(f"  En-tête : {entete}")
-    print("-" * 50)
-
-    for ligne, count in doublons.items():
-        print(f"  x{count} fois -> {list(ligne)}")
+    for ligne_originale, count in doublons:
+        print(f"  x{count} occurrences -> {ligne_originale}")
 
 
 # Point d'entrée
