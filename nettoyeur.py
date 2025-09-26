@@ -1,18 +1,14 @@
 # nettoyeur.py
-# v1.2 -- correction bug doublons subtils
+# v1.3 -- génération d'un rapport texte
 #
-# Problème découvert en testant avec test_doublons_subtils.csv :
-# "Balance analytique" et "Balance Analytique " (avec espace en fin)
-# n'étaient PAS détectés comme doublons parce que la comparaison
-# était sensible à la casse et aux espaces.
-#
-# Fix : normaliser chaque cellule avec .strip().lower() avant
-# de créer la clé de comparaison.
-# On garde la ligne originale pour l'affichage, mais on compare
-# la version normalisée. Deux variables : une pour comparer, une pour afficher.
+# Au lieu d'afficher seulement dans la console, le script
+# écrit maintenant un fichier .txt avec le résumé complet.
+# J'ai aussi ajouté quelques stats utiles dans le rapport.
 
 import csv
 import sys
+import os
+from datetime import datetime
 
 
 def lire_csv(chemin_fichier):
@@ -32,26 +28,17 @@ def lire_csv(chemin_fichier):
 
 
 def normaliser_ligne(ligne):
-    """
-    Normalise une ligne pour la comparaison :
-    - enlève les espaces en début/fin de chaque cellule (.strip())
-    - met tout en minuscules (.lower())
-    Retourne un tuple utilisable comme clé de dictionnaire.
-    """
+    """Normalise une ligne : strip + lowercase sur chaque cellule."""
     return tuple(cellule.strip().lower() for cellule in ligne)
 
 
 def detecter_doublons(lignes):
-    """
-    Détecte les doublons en comparant les lignes normalisées.
-    Retourne une liste de tuples : (ligne_originale, nb_occurrences).
-    """
-    compteur = {}       # clé normalisée -> nombre d'occurrences
-    premieres = {}      # clé normalisée -> première ligne originale vue
+    """Détecte les doublons en comparant les lignes normalisées."""
+    compteur = {}
+    premieres = {}
 
     for ligne in lignes:
         cle = normaliser_ligne(ligne)
-
         if cle in compteur:
             compteur[cle] += 1
         else:
@@ -66,15 +53,41 @@ def detecter_doublons(lignes):
     return doublons
 
 
-def afficher_resultats(entete, doublons):
-    """Affiche les doublons trouvés dans la console."""
-    if len(doublons) == 0:
-        print("Aucun doublon trouvé !")
-        return
+def generer_rapport_txt(chemin_fichier, entete, lignes, doublons):
+    """
+    Génère un fichier .txt avec le résumé de l'analyse.
+    Le nom du rapport est basé sur le nom du fichier d'entrée.
+    """
+    nom_base = os.path.splitext(os.path.basename(chemin_fichier))[0]
+    chemin_rapport = f"rapport_{nom_base}.txt"
 
-    print(f"{len(doublons)} doublon(s) détecté(s) :\n")
-    for ligne_originale, count in doublons:
-        print(f"  x{count} occurrences -> {ligne_originale}")
+    nb_doublons = sum(count for _, count in doublons)
+    nb_lignes_uniques = len(lignes) - nb_doublons + len(doublons)
+
+    with open(chemin_rapport, 'w', encoding='utf-8') as rapport:
+        rapport.write("=" * 55 + "\n")
+        rapport.write("  RAPPORT D'ANALYSE CSV\n")
+        rapport.write("=" * 55 + "\n\n")
+
+        rapport.write(f"Fichier analysé  : {chemin_fichier}\n")
+        rapport.write(f"Date d'analyse   : {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
+
+        rapport.write("--- RÉSUMÉ ---\n")
+        rapport.write(f"Lignes totales   : {len(lignes)}\n")
+        rapport.write(f"Doublons trouvés : {len(doublons)} groupe(s)\n")
+        rapport.write(f"Lignes en double : {nb_doublons}\n")
+        rapport.write(f"Lignes uniques   : {nb_lignes_uniques}\n\n")
+
+        if len(doublons) == 0:
+            rapport.write("✓ Aucun doublon détecté — fichier propre.\n")
+        else:
+            rapport.write("--- DÉTAIL DES DOUBLONS ---\n\n")
+            rapport.write(f"  Colonnes : {entete}\n\n")
+            for i, (ligne, count) in enumerate(doublons, 1):
+                rapport.write(f"  [{i}] Apparaît {count}x : {list(ligne)}\n")
+
+    print(f"Rapport généré : {chemin_rapport}")
+    return chemin_rapport
 
 
 # Point d'entrée
@@ -85,4 +98,12 @@ if len(sys.argv) < 2:
 chemin = sys.argv[1]
 entete, lignes = lire_csv(chemin)
 doublons = detecter_doublons(lignes)
-afficher_resultats(entete, doublons)
+
+# Affichage console rapide
+if len(doublons) == 0:
+    print("Aucun doublon trouvé.")
+else:
+    print(f"{len(doublons)} groupe(s) de doublons détecté(s).")
+
+# Générer le rapport
+generer_rapport_txt(chemin, entete, lignes, doublons)
