@@ -1,9 +1,9 @@
 # nettoyeur.py
-# v1.3 -- génération d'un rapport texte
+# v1.4 -- export CSV des doublons + fichiers de test ajoutés
 #
-# Au lieu d'afficher seulement dans la console, le script
-# écrit maintenant un fichier .txt avec le résumé complet.
-# J'ai aussi ajouté quelques stats utiles dans le rapport.
+# Dernière amélioration : en plus du rapport .txt, le script
+# génère maintenant un fichier CSV listant uniquement les doublons.
+# Utile pour corriger les données dans Excel ensuite.
 
 import csv
 import sys
@@ -54,10 +54,7 @@ def detecter_doublons(lignes):
 
 
 def generer_rapport_txt(chemin_fichier, entete, lignes, doublons):
-    """
-    Génère un fichier .txt avec le résumé de l'analyse.
-    Le nom du rapport est basé sur le nom du fichier d'entrée.
-    """
+    """Génère un fichier .txt avec le résumé de l'analyse."""
     nom_base = os.path.splitext(os.path.basename(chemin_fichier))[0]
     chemin_rapport = f"rapport_{nom_base}.txt"
 
@@ -79,31 +76,67 @@ def generer_rapport_txt(chemin_fichier, entete, lignes, doublons):
         rapport.write(f"Lignes uniques   : {nb_lignes_uniques}\n\n")
 
         if len(doublons) == 0:
-            rapport.write("✓ Aucun doublon détecté — fichier propre.\n")
+            rapport.write("Aucun doublon détecté — fichier propre.\n")
         else:
             rapport.write("--- DÉTAIL DES DOUBLONS ---\n\n")
             rapport.write(f"  Colonnes : {entete}\n\n")
             for i, (ligne, count) in enumerate(doublons, 1):
                 rapport.write(f"  [{i}] Apparaît {count}x : {list(ligne)}\n")
 
-    print(f"Rapport généré : {chemin_rapport}")
     return chemin_rapport
+
+
+def exporter_doublons_csv(chemin_fichier, entete, doublons):
+    """
+    Exporte les doublons dans un fichier CSV séparé.
+    Ajoute une colonne 'nb_occurrences' pour faciliter la correction.
+    """
+    nom_base = os.path.splitext(os.path.basename(chemin_fichier))[0]
+    chemin_export = f"doublons_{nom_base}.csv"
+
+    with open(chemin_export, 'w', newline='', encoding='utf-8') as fichier:
+        ecrivain = csv.writer(fichier)
+
+        # En-tête avec colonne supplémentaire
+        ecrivain.writerow(entete + ['nb_occurrences'])
+
+        for ligne, count in doublons:
+            ecrivain.writerow(list(ligne) + [count])
+
+    return chemin_export
 
 
 # Point d'entrée
 if len(sys.argv) < 2:
     print("Usage : python nettoyeur.py <fichier.csv>")
+    print("\nExemples avec les fichiers de test :")
+    print("  python nettoyeur.py donnees_test/test_simple.csv")
+    print("  python nettoyeur.py donnees_test/test_doublons_subtils.csv")
+    print("  python nettoyeur.py donnees_test/test_propre.csv")
     sys.exit(1)
 
 chemin = sys.argv[1]
+
+if not os.path.exists(chemin):
+    print(f"Erreur : fichier '{chemin}' introuvable.")
+    sys.exit(1)
+
+print(f"\nAnalyse de : {chemin}")
+print("-" * 40)
+
 entete, lignes = lire_csv(chemin)
 doublons = detecter_doublons(lignes)
 
-# Affichage console rapide
-if len(doublons) == 0:
-    print("Aucun doublon trouvé.")
-else:
-    print(f"{len(doublons)} groupe(s) de doublons détecté(s).")
+print(f"Lignes lues      : {len(lignes)}")
+print(f"Doublons trouvés : {len(doublons)} groupe(s)")
 
-# Générer le rapport
-generer_rapport_txt(chemin, entete, lignes, doublons)
+rapport_txt = generer_rapport_txt(chemin, entete, lignes, doublons)
+print(f"Rapport texte    : {rapport_txt}")
+
+if len(doublons) > 0:
+    rapport_csv = exporter_doublons_csv(chemin, entete, doublons)
+    print(f"Export doublons  : {rapport_csv}")
+else:
+    print("Aucun fichier CSV généré (pas de doublons).")
+
+print("\nTerminé.")
